@@ -95,11 +95,11 @@ def rsi(s,n=14):
 
 def add(d):
     d=d.copy()
-    d["ema20"]=ema(d.close,20); d["ema50"]=ema(d.close,50); d["ema200"]=ema(d.close,200)
+    d["ema20"]=ema(d["close"],20); d["ema50"]=ema(d["close"],50); d["ema200"]=ema(d["close"],200)
     d["rsi"]=rsi(d.close)
-    m=ema(d.close,12)-ema(d.close,26); sig=ema(m,9)
+    m=ema(d["close"],12)-ema(d["close"],26); sig=ema(m,9)
     d["macd"]=m; d["signal"]=sig; d["hist"]=m-sig
-    pc=d.close.shift(1)
+    pc=d["close"].shift(1)
     tr=pd.concat([d.high-d.low,(d.high-pc).abs(),(d.low-pc).abs()],axis=1).max(axis=1)
     d["atr"]=tr.ewm(alpha=1/14,min_periods=14,adjust=False).mean()
     d["vma"]=d.volume.rolling(20).mean()
@@ -108,23 +108,23 @@ def add(d):
 
 def trend(d):
     if len(d)<210:return 0
-    x=d.iloc[-1]; return (5 if x.close>x.ema20 else 0)+(5 if x.ema20>x.ema50 else 0)+(5 if x.ema50>x.ema200 else 0)
+    x=d.iloc[-1]; return (5 if x["close"]>x.ema20 else 0)+(5 if x.ema20>x.ema50 else 0)+(5 if x.ema50>x.ema200 else 0)
 
 def setup(d):
     if len(d)<60:return None,0
     x,p=d.iloc[-1],d.iloc[-2]
     ph=d.high.iloc[-21:-1].max()
-    if x.close>ph or (p.low<=ph*1.015 and x.close>=ph*.995):
+    if x["close"]>ph or (p.low<=ph*1.015 and x["close"]>=ph*.995):
         return "BREAKOUT + RETEST",15
-    if abs(x.close-x.ema20)/x.close<=.018 or (p.close<p.ema20 and x.close>x.ema20):
+    if abs(x["close"]-x.ema20)/x["close"]<=.018 or (p["close"]<p.ema20 and x["close"]>x.ema20):
         return "PULLBACK",15
     sup=d.low.iloc[-31:-1].min()
-    if x.low<=sup*1.015 and x.close>sup*1.01:return "SUPPORT REVERSAL",15
+    if x.low<=sup*1.015 and x["close"]>sup*1.01:return "SUPPORT REVERSAL",15
     return None,0
 
 def confirm(d):
     if len(d)<60:return 0,False
-    x=d.iloc[-1]; sc=(3 if x.close>x.ema20 else 0)+(3 if x.ema20>x.ema50 else 0)
+    x=d.iloc[-1]; sc=(3 if x["close"]>x.ema20 else 0)+(3 if x.ema20>x.ema50 else 0)
     sc+=(2 if x.rsi>=50 else 0)+(2 if x.hist>0 else 0)
     return sc,sc>=6
 
@@ -134,15 +134,15 @@ def signal(c,d,h4,h1,btc):
     cp,ok=confirm(h1)
     if not setup_name or not ok:return None
     score=trend(d)+trend(h4)
-    score += 10 if x.close>x.ema20>x.ema50>x.ema200 else (7 if x.close>x.ema20>x.ema50 else (4 if x.close>x.ema20 else 0))
+    score += 10 if x["close"]>x.ema20>x.ema50>x.ema200 else (7 if x["close"]>x.ema20>x.ema50 else (4 if x["close"]>x.ema20 else 0))
     score += sp
     score += 10 if 52<=x.rsi<=68 else (6 if 48<=x.rsi<52 or 68<x.rsi<=74 else (2 if x.rsi>74 else 0))
     score += 10 if x.hist>0 and x.macd>x.signal else (6 if x.hist>0 else 0)
     vr=x.vr
     score += 15 if vr>=2 else (12 if vr>=1.5 else (8 if vr>=1.2 else (5 if vr>=1 else 0)))
     score += cp + btc
-    if score<MIN_SCORE or y.close>x.ema20*1.10:return None
-    entry=float(y.close); atr=float(x.atr)
+    if score<MIN_SCORE or y["close"]>x.ema20*1.10:return None
+    entry=float(y["close"]); atr=float(x.atr)
     if not np.isfinite(atr) or atr<=0:return None
     stop=min(float(h4.low.iloc[-20:].min()),entry-1.2*atr)
     risk=entry-stop
@@ -181,7 +181,7 @@ def main():
             d=add(candles(c["instId"],"1Dutc",220))
             if len(d)>=210:
                 x=d.iloc[-1]
-                if x.close>x.ema20 and x.ema20>x.ema50 and x.close>x.ema200:
+                if x["close"]>x.ema20 and x.ema20>x.ema50 and x["close"]>x.ema200:
                     c["_d"]=d; pre.append(c)
         except Exception as e: print("1D skip",c["symbol"],e)
         if i%50==0: print("1D",i,"/",len(liq),"candidates",len(pre))
