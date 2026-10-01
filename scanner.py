@@ -1,7 +1,7 @@
 import os, time, requests, numpy as np, pandas as pd
 from datetime import datetime, timezone
 
-TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
+TOKEN = os.environ["TELEGRAM_BOحT_TOKEN"]
 CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 CG = "https://api.coingecko.com/api/v3"
 OKX = "https://www.okx.com/api/v5"
