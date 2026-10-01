@@ -137,7 +137,7 @@ def signal(c,d,h4,h1,btc):
     score += 10 if x["close"]>x.ema20>x.ema50>x.ema200 else (7 if x["close"]>x.ema20>x.ema50 else (4 if x["close"]>x.ema20 else 0))
     score += sp
     score += 10 if 52<=x.rsi<=68 else (6 if 48<=x.rsi<52 or 68<x.rsi<=74 else (2 if x.rsi>74 else 0))
-    score += 10 if x["hist"]>0 and x.macd>x.signal else (6 if x.hist>0 else 0)
+    score += 10 if x["hist"]>0 and x.macd>x.signal else (6 if x["hist"] else 0)
     vr=x.vr
     score += 15 if vr>=2 else (12 if vr>=1.5 else (8 if vr>=1.2 else (5 if vr>=1 else 0)))
     score += cp + btc
