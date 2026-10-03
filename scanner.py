@@ -142,14 +142,71 @@ def signal(c,d,h4,h1,btc):
     score += 15 if vr>=2 else (12 if vr>=1.5 else (8 if vr>=1.2 else (5 if vr>=1 else 0)))
     score += cp + btc
     if score<MIN_SCORE or y["close"]>x["ema20"]*1.10:return None
-    entry=float(y["close"]); atr=float(x["atr"])
+    # --- Structure-based trade levels (keeps V2 signal scoring unchanged) ---
+    entry_ref=float(y["close"]); atr=float(x["atr"])
     if not np.isfinite(atr) or atr<=0:return None
-    stop=min(float(h4["low"].iloc[-20:].min()),entry-1.2*atr)
+
+    def pivots(frame, left=2, right=2):
+        highs=[]; lows=[]
+        hi=frame["high"].to_numpy(); lo=frame["low"].to_numpy()
+        for i in range(left, len(frame)-right):
+            if hi[i] >= hi[i-left:i].max() and hi[i] > hi[i+1:i+right+1].max():
+                highs.append((i,float(hi[i])))
+            if lo[i] <= lo[i-left:i].min() and lo[i] < lo[i+1:i+right+1].min():
+                lows.append((i,float(lo[i])))
+        return highs,lows
+
+    def cluster_levels(levels, tol):
+        levels=sorted(levels)
+        clusters=[]
+        for v in levels:
+            if not clusters or abs(v-np.mean(clusters[-1])) > tol:
+                clusters.append([v])
+            else:
+                clusters[-1].append(v)
+        return [float(np.mean(z)) for z in clusters]
+
+    # Use 4H as the primary structure and 1H for entry refinement.
+    ph4, pl4 = pivots(h4.tail(120))
+    ph1, pl1 = pivots(h1.tail(160))
+    tol4=max(0.006*entry_ref, 0.35*atr)
+    tol1=max(0.004*entry_ref, 0.25*atr)
+
+    resistances=cluster_levels([v for _,v in ph4]+[v for _,v in ph1], max(tol4,tol1))
+    supports=cluster_levels([v for _,v in pl4]+[v for _,v in pl1], max(tol4,tol1))
+
+    # For a long setup, prefer a nearby support below price as the entry zone.
+    support_candidates=[v for v in supports if v < entry_ref]
+    if not support_candidates:
+        return None
+    support=max(support_candidates)
+
+    # Entry is the support/retest area, but never materially above the current 1H price.
+    entry=max(support, entry_ref-0.35*atr)
+    if entry > entry_ref: entry=entry_ref
+
+    # Stop sits below the structural support with an ATR buffer.
+    stop=min(support-0.20*atr, entry-0.80*atr)
+
+    # Reject structurally weak/tight stops.
     risk=entry-stop
-    if risk<=0:return None
+    if risk<=0 or risk>0.08*entry:
+        return None
+
+    # TP levels are the next meaningful resistances above entry.
+    r_levels=sorted([r for r in resistances if r > entry*(1+0.003)])
+    valid=[r for r in r_levels if (r-entry)/risk >= 2.0]
+    if not valid:
+        return None
+
+    tp1=valid[0]
+    tp2=valid[1] if len(valid)>1 else tp1+0.5*risk
+    tp3=valid[2] if len(valid)>2 else tp2+0.75*risk
+
     return {"symbol":c["symbol"],"score":int(score),"setup":setup_name,"entry":entry,
-            "sl":stop,"tp1":entry+2.5*risk,"tp2":entry+3*risk,"tp3":entry+4*risk,
-            "rsi":float(x["rsi"]),"vr":float(vr) if pd.notna(vr) else 0}
+            "sl":stop,"tp1":tp1,"tp2":tp2,"tp3":tp3,
+            "rsi":float(x["rsi"]),"vr":float(vr) if pd.notna(vr) else 0,
+            "support":support,"entry_ref":entry_ref,"rr_tp1":(tp1-entry)/risk}
 
 def fp(v):
     v=float(v)
@@ -208,7 +265,8 @@ def main():
             msg += [f"🔥 #{n} {z['symbol']}/USDT",f"🏆 Score: {z['score']}/110",f"📌 {z['setup']}",
                     f"🟢 Entry: {fp(z['entry'])}",f"🛑 SL: {fp(z['sl'])}",
                     f"🎯 TP1: {fp(z['tp1'])}",f"🎯 TP2: {fp(z['tp2'])}",f"🎯 TP3: {fp(z['tp3'])}",
-                    f"RSI: {z['rsi']:.1f} | Volume: {z['vr']:.2f}x","⚠️ سیگنال الگوریتمی است؛ مدیریت ریسک ضروری است.","━━━━━━━━━━━━"]
+                    f"🧱 Support: {fp(z['support'])} | R/R TP1: {z['rr_tp1']:.2f}",
+                    f"RSI: {z['rsi']:.1f} | Volume: {z['vr']:.2f}x","⚠️ سطوح Entry/SL/TP بر اساس ساختار بازار؛ مدیریت ریسک ضروری است.","━━━━━━━━━━━━"]
     tg("\n".join(msg)); print("Finished in",round(time.time()-t,1),"sec")
 
 if __name__=="__main__": main()
